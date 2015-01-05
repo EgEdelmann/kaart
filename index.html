@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<style>
+
+body {
+font-family: sans-serif;
+}    
+    
+.overlay {
+  fill: none;
+  pointer-events: all;
+}
+
+.gemeente {
+  fill: #fff5f0;
+}
+
+
+.state-border {
+  fill: none;
+  stroke: #3b3a3a;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+    
+    
+.vestiging {
+  fill: lightsteelblue;
+  stroke: lightsteelblue;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}    
+
+.place-label {
+font-size: 1.25em;
+}
+
+    
+
+</style>
+<body>
+<script src="d3/d3.js"></script>
+<script src="d3/topojson.v1.min.js"></script>
+    
+
+<h1>Dashboard aanmeldingen</h1>    
+    
+
+<script>
+    
+var data_clienten = [], 
+    kaart = [];    
+    
+var width = 600,
+    height = 700;
+    
+var quantize = d3.scale.quantize()
+    .range(["#fff5f0", "#fee0d2","#fcbba1","#fc9272",
+            "#fb6a4a","#ef3b2c","#cb181d","#a50f15","#67000d"]);
+
+var kleurschaal = d3.scale.category20().domain([0, 519]);    
+    
+var scale0 = 0.6;    
+    
+var path = d3.geo.path()
+    .projection(null)
+    .pointRadius(10);
+
+var zoom = d3.behavior.zoom()
+    .translate([0, 0])
+    .scale(scale0)
+    .scaleExtent([0.5, 8])
+    .on("zoom", zoomed);
+
+var svg = d3.select("body").append("svg")
+    .attr("width", width)
+    .attr("height", height);
+
+var background = svg.append("rect")
+    .attr("width", width)
+    .attr("height", height)
+    .style("fill", "#b9ddfc")
+    
+var features = svg.append("g");
+    
+
+svg.append("rect")
+    .attr("class", "overlay")
+    .attr("width", width)
+    .attr("height", height)
+    .call(zoom);
+
+d3.json("NL.json", function(error, us) {
+  if (error) return console.error(error);
+    console.log(us);
+    kaart = us;
+    	 d3.csv("clienten_gemeenten.csv", function (error, clienten){
+             
+             clienten = clienten.map(function (d) {
+                 return {
+                     code: d.code,
+                     HSK_regio: d.HSK_regio,
+                     Vestiging: d.Vestiging, 
+                     type: d.type,
+                     jaar: d.Jaar_Startdatum, 
+                     aantal: +d.aantal};
+             })
+             
+         
+             data_clienten= d3.nest()
+                             .key(function (d) {return d.code;})
+                             .rollup(function (regio) {return d3.sum(regio, function (e) {return e.aantal;});})
+                             .entries(clienten);
+             
+             //data gebruiken om domein te zetten
+             quantize.domain([0, Math.log(d3.max(data_clienten, function (d) {return d.values;}))]);
+
+             
+             //Merge the ag. data and GeoJSON
+            //Loop through once for each ag. data value
+            for (var i = 0; i < data_clienten.length; i++) {
+
+                var dataState = data_clienten[i].key;              //Grab state name
+                var dataValue = parseFloat(data_clienten[i].values);  //Grab data value, and convert from string to float
+                
+             
+                //Find the corresponding state inside the GeoJSON
+                for (var j = 0; j < us.objects.gemeentes.geometries.length; j++) {
+
+                    var jsonGemeente = us.objects.gemeentes.geometries[j].properties.GM_CODE;
+ 
+                    if (dataState == jsonGemeente) {
+
+                        //Copy the data value into the JSON
+                        us.objects.gemeentes.geometries[j].properties.instroom_totaal = dataValue;
+
+                        //Stop looking through the JSON
+                        break;
+
+                    }
+                    
+                }
+                
+                
+            };
+             
+             d3.selectAll(".gemeente").style("fill", function (d) {return quantize(Math.log(d.properties.instroom_totaal));}); 
+	 });
+
+        
+    
+var nederland = features.selectAll(".state")
+      .data(topojson.feature(us, us.objects.gemeentes).features)
+      .enter()
+      .append("path")
+      .attr("class", "gemeente")
+      .style("fill", function (d) {return quantize.range()[0];})
+      .attr("d", path);
+
+//d3.selectAll(".gemeente")
+                //.attr("class", function (d) {return quantize(d.properties.instroom_totaal);})    
+
+      //.attr("class", function (d) {return quantize(d.properties.instroom_totaal);})    
+    
+    
+var gemeenten =  features.append("path")
+      .datum(topojson.mesh(us, us.objects.gemeentes, function(a, b) { return a !== b; }))
+      .attr("class", "state-border")
+      .attr("d", path)
+      .style("stroke-width", "1.5px");
+
+    /*
+var vestigingen = features.append("path")
+      .datum(topojson.feature(us, us.objects.vestigingen))
+      .attr("class", "vestiging")
+      .attr("d", path);
+    */
+    
+var vestigingen = features.selectAll(".vestiging")
+        .data(topojson.feature(us, us.objects.vestigingen).features)
+        .enter().append("circle")
+        .attr("transform", function(d) { return "translate(" + d.geometry.coordinates + ")"; })
+        .attr("r", 5)
+        .attr("class", "vestiging");
+
+    
+    features.attr("transform", "translate(0,0)scale(0.6)");
+
+var vest_labels = features.selectAll(".place-label")
+    .data(topojson.feature(us, us.objects.vestigingen).features)
+    .enter().append("text")
+    .attr("class", "place-label")
+    .attr("transform", function(d) { return "translate(" + d.geometry.coordinates + ")"; })
+    .attr("dy", "0em")
+    .attr("dx", "0.5em")
+    .text(function(d) { return d.properties.Naam; })
+    .attr("id", function(d) { return "label-" + d.properties.Naam.replace(/ /g,"_");}); 
+    
+
+    
+//Een paar labels aanpassen    
+d3.selectAll("#label-Den_Haag").attr("text-anchor", "end").attr("dy", "1em")  
+d3.selectAll("#label-Zoetermeer").attr("dy", "1em")  
+    
+    
+
+
+
+   
+
+
+    
+});
+
+function zoomed() {
+    var adjust = 1.25 / (d3.event.scale / scale0);
+    
+    features.attr("transform", "translate(" + d3.event.translate + ")scale(" + d3.event.scale + ")");
+    features.select(".state-border").style("stroke-width", adjust + "px");
+    features.select(".gemeente").style("stroke-width", adjust + "px");
+  
+    var labels = d3.selectAll(".place-label")
+                .style("font-size" , adjust + "em")
+                .attr("dx", 0.5 / (d3.event.scale / scale0) + "em");
+ 
+    features.selectAll(".vestiging").attr("r", 5/ (d3.event.scale / scale0));
+
+}
+
+d3.select(self.frameElement).style("height", height + "px");
+
+
+    
+
+</script>
