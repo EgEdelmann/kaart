@@ -4,6 +4,7 @@
 
 body {
 font-family: sans-serif;
+margin: 1em;    
 }    
     
 .overlay {
@@ -32,11 +33,78 @@ font-family: sans-serif;
 }    
 
 .place-label {
+
 font-size: 1.25em;
 }
 
-    
 
+#container_map {
+    padding: 0;
+    float:left;
+    width:60%;
+}    
+
+
+#container_list {
+    padding: 0;
+    float:right;
+    width:37%;
+    margin: 1%;
+}    
+  
+ul {
+line-height: 2em;
+cursor:pointer; 
+list-style-position: inside; 
+margin: 0 10 0 10;   
+}    
+    
+ul .lijst_vestiging {
+    overflow: hidden;
+    max-height: 200px;
+    -webkit-transition:max-height 0.3s ease;
+	-ms-transition:max-height 0.3s ease;
+	-moz-transition:max-height 0.3s ease;
+	-o-transition:max-height 0.3s ease;
+	transition:max-height 0.3s ease;
+    list-style-type: none;
+
+}    
+
+ul li {
+    background-color: #dbdcdd;
+    padding-left: 20px;
+    margin-bottom: 10px;
+}   
+
+ul li .items_vestiging {
+    background-color: #e9edf2;
+}    
+    
+.item_level1 {
+display: inline-block; 
+width: 75%;
+}    
+ 
+.number_level1 {
+    display: inline-block; 
+    width: 20%;
+    text-align: right;
+}     
+    
+.item_level2 {
+    display: inline-block; 
+    width: 75%;
+}    
+
+.number_level2 {
+    width: 20%;    
+}    
+
+ul .lijst_vestiging.collapsed {
+    max-height: 0px;
+}    
+    
 </style>
 <body>
 <script src="d3/d3.js"></script>
@@ -44,12 +112,24 @@ font-size: 1.25em;
     
 
 <h1>Dashboard aanmeldingen</h1>    
+
+<div>
     
+    <div id="container_map"> </div>
+
+    <div id=container_list> 
+        
+        <ul id = "regionlist"> </ul>    
+    
+    </div>
+    
+</div>
 
 <script>
     
 var data_clienten = [], 
-    kaart = [];    
+    kaart = [], 
+    clienten;    
     
 var width = 600,
     height = 700;
@@ -72,7 +152,7 @@ var zoom = d3.behavior.zoom()
     .scaleExtent([0.5, 8])
     .on("zoom", zoomed);
 
-var svg = d3.select("body").append("svg")
+var svg = d3.select("#container_map").append("svg")
     .attr("width", width)
     .attr("height", height);
 
@@ -94,6 +174,7 @@ d3.json("NL.json", function(error, us) {
   if (error) return console.error(error);
     console.log(us);
     kaart = us;
+    
     	 d3.csv("clienten_gemeenten.csv", function (error, clienten){
              
              clienten = clienten.map(function (d) {
@@ -106,12 +187,14 @@ d3.json("NL.json", function(error, us) {
                      aantal: +d.aantal};
              })
              
+             console.log(clienten);
          
              data_clienten= d3.nest()
                              .key(function (d) {return d.code;})
-                             .rollup(function (regio) {return d3.sum(regio, function (e) {return e.aantal;});})
+                             .rollup(function (gemeente) {return d3.sum(gemeente, function (e) {return e.aantal;});})
                              .entries(clienten);
              
+
              //data gebruiken om domein te zetten
              quantize.domain([0, Math.log(d3.max(data_clienten, function (d) {return d.values;}))]);
 
@@ -144,7 +227,97 @@ d3.json("NL.json", function(error, us) {
                 
             };
              
+             //data toegevoegd aan de topojson data gebruiken om de gemeenten te kleuren
              d3.selectAll(".gemeente").style("fill", function (d) {return quantize(Math.log(d.properties.instroom_totaal));}); 
+             
+             
+             
+             //data groeperen per regio en vestiging, waarden sommeren
+             var data_per_regio = d3.nest()
+                                    .key(function (d) {return d.HSK_regio;})
+                                    .key(function (d) {return d.Vestiging;})
+                                    .key(function (d) {return d.type;})
+                                    .rollup(function (regio) {return d3.sum(regio, function (e) {return e.aantal;});})
+                                    .entries(clienten);
+
+             console.log("per type", data_per_regio);
+             
+        
+             //door het nesten zijn de aantallen clienten alleen op het laagste niveau beschikbaar
+             //Hier worden de aantallen omhoog gesommeerd
+             
+            for (i = 0; i < data_per_regio.length; i++) {
+			 
+				var BGGZ_regio = 0,
+					SGGZ_regio = 0, 
+					first_level = data_per_regio[i].values;
+				
+				for (j = 0; j < first_level.length; j++) {
+				
+				    var second_level = first_level[j].values;
+					
+					for (k = 0; k < second_level.length; k++) {
+					
+                        var third_level = second_level[k];
+
+                        if (third_level.key === "BGGZ") 
+                        {
+                        BGGZ_regio = BGGZ_regio + third_level.values
+                        } else {SGGZ_regio = SGGZ_regio + third_level.values};
+
+                        }
+				}
+			 
+			     var waarden = [{BGGZ: BGGZ_regio}, {SGGZ: SGGZ_regio}]; 
+	
+			     data_per_regio[i].waarden = waarden;
+			 }
+             
+            
+             var items_level1 = d3.select("#regionlist")
+                                  .selectAll("li")
+                                  .data(data_per_regio)
+                                  .enter()
+                                  .append("li")
+                                  .attr("class", "items_regio")
+                                  .on("click", expand)
+                                  .append("span")
+                                  .attr("class", "item_level1")
+                                  .text(function (d) {return d.key;})
+                                  
+                                d3.selectAll(".items_regio")
+                                  .append("span")
+                                  .attr("class", "number_level1")
+                                  .text(function (d) {return d3.sum(d.values, 
+                                                                    function (d1) {return d3.sum(d1.values, 
+                                                                                                 function (d2) {return d2.values;});});});
+                
+             var lijst_level2 = d3.selectAll(".items_regio")
+                                .append("ul")
+                                .attr("class", "lijst_vestiging")
+                                .classed("collapsed", true) ;
+             
+             var lijst_level2 = d3.selectAll(".lijst_vestiging")
+                                .selectAll(".items_vestiging")
+                                .data(function (d1) {return d1.values;})
+                                .enter()
+                                .append("li")
+                                .attr("class", "items_vestiging")
+                                .append("span")
+                                .attr("class", "item_level2")
+                                .text(function (d2) {return d2.key;})
+             
+                              d3.selectAll(".items_vestiging")
+                                .append("span")
+                                .attr("class", "number_level2")
+                                .text(function (d) {return d3.sum(d.values, function (d) {return d.values;})});
+             
+       
+             //var bars_regio = d3.selectAll(".items_regio").append("svg").attr("width", "120px").attr("height", "40");
+             
+             
+             
+             
 	 });
 
         
@@ -156,11 +329,6 @@ var nederland = features.selectAll(".state")
       .attr("class", "gemeente")
       .style("fill", function (d) {return quantize.range()[0];})
       .attr("d", path);
-
-//d3.selectAll(".gemeente")
-                //.attr("class", function (d) {return quantize(d.properties.instroom_totaal);})    
-
-      //.attr("class", function (d) {return quantize(d.properties.instroom_totaal);})    
     
     
 var gemeenten =  features.append("path")
@@ -169,12 +337,6 @@ var gemeenten =  features.append("path")
       .attr("d", path)
       .style("stroke-width", "1.5px");
 
-    /*
-var vestigingen = features.append("path")
-      .datum(topojson.feature(us, us.objects.vestigingen))
-      .attr("class", "vestiging")
-      .attr("d", path);
-    */
     
 var vestigingen = features.selectAll(".vestiging")
         .data(topojson.feature(us, us.objects.vestigingen).features)
@@ -212,6 +374,23 @@ d3.selectAll("#label-Zoetermeer").attr("dy", "1em")
     
 });
 
+    
+function expand(d) {
+
+    console.log("click caught", this)
+    
+    var element = d3.select(this).select("ul");
+    
+    console.log("selected on click", element);
+    
+    if(element.classed("collapsed")) { 
+        element.classed("collapsed", false)
+    } else {
+        element.classed("collapsed", true)};
+
+    console.log(element.attr("class"));
+}    
+    
 function zoomed() {
     var adjust = 1.25 / (d3.event.scale / scale0);
     
