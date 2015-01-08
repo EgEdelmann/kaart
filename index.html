@@ -54,8 +54,8 @@ font-size: 1.25em;
   
 ul {
 line-height: 2em;
-cursor:pointer; 
-list-style-position: inside; 
+cursor:pointer;     
+list-style-type: none; 
 margin: 0 10 0 10;   
 }    
     
@@ -77,24 +77,37 @@ ul li {
     margin-bottom: 10px;
 }   
 
-ul li .items_vestiging {
-    background-color: #e9edf2;
+  
+
+ul li.items_regio:before { 
+    content:''; 
+    display:inline-block; 
+    height:1em; width:2em; 
+    background-image:url('images/icon_arrow.svg'); 
+    background-size:contain; 
+    background-repeat:no-repeat;
+    padding-right: 0.5em;}     
+ 
+ 
+ul li.items_vestiging {
+background-color:#eef0f2;
 }    
-    
+
 .item_level1 {
 display: inline-block; 
-width: 75%;
+width: 70%;
 }    
  
 .number_level1 {
     display: inline-block; 
-    width: 20%;
+    width: 10%;
     text-align: right;
+    margin-right: 1em;
 }     
     
 .item_level2 {
     display: inline-block; 
-    width: 75%;
+    width: 70%;
 }    
 
 .number_level2 {
